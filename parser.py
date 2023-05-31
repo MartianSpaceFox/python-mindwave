@@ -75,71 +75,65 @@ class Parser:
 			byte = yield
 			if byte== 0xaa:
 				byte = yield # This byte should be "\aa" too
-				if byte== 0xaa:
-					# packet synced by 0xaa 0xaa
-					packet_length = yield
-					packet_code = yield
-					if packet_code == 0xd4:
-						# standing by
-						self.dongle_state= "standby"
-					elif packet_code == 0xd0:
-						self.dongle_state = "connected"
-					else:
-						self.sending_data = True
-						left = packet_length-2
-						while left>0:
-							if packet_code ==0x80: # raw value
-								row_length = yield
+			if byte== 0xaa:
+				# packet synced by 0xaa 0xaa
+				packet_length = yield
+				packet_code = yield
+				if packet_code == 0xd4:
+					# standing by
+					self.dongle_state= "standby"
+				elif packet_code == 0xd0:
+					self.dongle_state = "connected"
+				else:
+					self.sending_data = True
+					left = packet_length-2
+					while left>0:
+						if packet_code ==0x80: # raw value
+							row_length = yield
+							a = yield
+							b = yield
+							value = struct.unpack("<h",chr(a)+chr(b))[0]
+							self.raw_values.append(value)
+							if len(self.raw_values)>self.buffer_len:
+								self.raw_values = self.raw_values[-self.buffer_len:]
+							left-=2
+
+							if self.raw_file:
+								t = time()-self.raw_start_time
+								self.raw_file.write("%.4f,%i\n" %(t, value))
+						elif packet_code == 0x02: # Poor signal
+							a = yield
+							self.poor_signal = a
+							left-=1
+						elif packet_code == 0x04: # Attention (eSense)
+							a = yield
+							if a>0:
+								v = struct.unpack("b",chr(a))[0]
+								if v>0:
+									self.current_attention = v
+									if self.esense_file:
+										self.esense_file.write("%.2f,,%i\n" % (time()-self.esense_start_time, v))
+							left-=1
+						elif packet_code == 0x05: # Meditation (eSense)
+							a = yield
+							if a>0:
+								v = struct.unpack("b",chr(a))[0]
+								if v>0:
+									self.current_meditation = v
+									if self.esense_file:
+										self.esense_file.write("%.2f,%i,\n" % (time()-self.esense_start_time, v))
+
+							left-=1
+						elif packet_code == 0x83:
+							vlength = yield
+							self.current_vector = []
+							for _ in range(8):
 								a = yield
 								b = yield
-								value = struct.unpack("<h",chr(a)+chr(b))[0]
-								self.raw_values.append(value)
-								if len(self.raw_values)>self.buffer_len:
-									self.raw_values = self.raw_values[-self.buffer_len:]
-								left-=2
-								
-								if self.raw_file:
-									t = time()-self.raw_start_time
-									self.raw_file.write("%.4f,%i\n" %(t, value))
-							elif packet_code == 0x02: # Poor signal
-								a = yield
-								self.poor_signal = a
-								if a>0:
-									pass 
-								left-=1
-							elif packet_code == 0x04: # Attention (eSense)
-								a = yield
-								if a>0:
-									v = struct.unpack("b",chr(a))[0]
-									if v>0:
-										self.current_attention = v
-										if self.esense_file:
-											self.esense_file.write("%.2f,,%i\n" % (time()-self.esense_start_time, v))
-								left-=1
-							elif packet_code == 0x05: # Meditation (eSense)
-								a = yield
-								if a>0:
-									v = struct.unpack("b",chr(a))[0]
-									if v>0:
-										self.current_meditation = v
-										if self.esense_file:
-											self.esense_file.write("%.2f,%i,\n" % (time()-self.esense_start_time, v))
-
-								left-=1
-							elif packet_code == 0x83:
-									vlength = yield
-									self.current_vector = []
-									for row in range(8):
-										a = yield
-										b = yield
-										c = yield
-										value = a*255*255+b*255+c
-										self.current_vector.append(value)
-									left-=vlength
-							packet_code = yield					
-				else:
-					pass # sync failed
-			else:
-				pass # sync failed
+								c = yield
+								value = a*255*255+b*255+c
+								self.current_vector.append(value)
+							left-=vlength
+						packet_code = yield
 dongle_state = None
 DONGLE_STANDBY= "Standby"
