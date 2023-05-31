@@ -202,43 +202,9 @@ def in_range(Template, Scroll, Distance):
 	
 	"""
 	
-	for i in range(0,  len(Template)):
-			if abs(Template[i] - Scroll[i]) > Distance:
-			     return False
-	return True
-	""" Desperate code, but do not delete
-	def bit_in_range(Index): 
-		if abs(Scroll[Index] - Template[Bit]) <=  Distance : 
-			print "Bit=", Bit, "Scroll[Index]", Scroll[Index], "Template[Bit]",\
-			 Template[Bit], "abs(Scroll[Index] - Template[Bit])",\
-			 abs(Scroll[Index] - Template[Bit])
-			return Index + 1 # move 
-
-	Match_No_Tail = range(0, len(Scroll) - 1) # except the last one 
-#	print Match_No_Tail
-
-	# first compare Template[:-2] and Scroll[:-2]
-
-	for Bit in xrange(0, len(Template) - 1): # every bit of Template is in range of Scroll
-		Match_No_Tail = filter(bit_in_range, Match_No_Tail)
-		print Match_No_Tail
-		
-	# second and last, check whether Template[-1] is in range of Scroll and 
-	#	Scroll[-1] in range of Template
-
-	# 2.1 Check whether Template[-1] is in the range of Scroll
-	Bit = - 1
-	Match_All =  filter(bit_in_range, Match_No_Tail)
-	
-	# 2.2 Check whether Scroll[-1] is in the range of Template
-	# I just write a  loop for this. 
-	for i in Match_All:
-		if abs(Scroll[-1] - Template[i] ) <= Distance:
-			Match_All.remove(i)
-	
-	
-	return len(Match_All), len(Match_No_Tail)
-	"""
+	return all(
+		abs(Template[i] - Scroll[i]) <= Distance for i in range(0, len(Template))
+	)
 
 def bin_power(X,Band,Fs):
 	"""Compute power in each frequency bin specified by Band from FFT result of 
@@ -306,12 +272,7 @@ def first_order_diff(X):
 		Y = [x(2) - x(1) , x(3) - x(2), ..., x(N) - x(N-1)]
 		
 	"""
-	D=[]
-	
-	for i in xrange(1,len(X)):
-		D.append(X[i]-X[i-1])
-
-	return D
+	return [X[i]-X[i-1] for i in xrange(1,len(X))]
 
 def pfd(X, D=None):
 	"""Compute Petrosian Fractal Dimension of a time series from either two 
@@ -328,12 +289,9 @@ def pfd(X, D=None):
 	"""
 	if D is None:																						## Xin Liu
 		D = first_order_diff(X)
-	N_delta= 0; #number of sign changes in derivative of the signal
-	for i in xrange(1,len(D)):
-		if D[i]*D[i-1]<0:
-			N_delta += 1
+	N_delta = sum(1 for i in xrange(1,len(D)) if D[i]*D[i-1]<0)
 	n = len(X)
-	return log10(n)/(log10(n)+log10(n/n+0.4*N_delta))
+	return log10(n) / (log10(n) + log10(1 + 0.4*N_delta))
 
 
 def hfd(X, Kmax):
@@ -346,14 +304,12 @@ def hfd(X, Kmax):
 	for k in xrange(1,Kmax):
 		Lk = []
 		for m in xrange(0,k):
-			Lmk = 0
-			for i in xrange(1,int(floor((N-m)/k))):
-				Lmk += abs(X[m+i*k] - X[m+i*k-k])
+			Lmk = sum(abs(X[m+i*k] - X[m+i*k-k]) for i in xrange(1,int(floor((N-m)/k))))
 			Lmk = Lmk*(N - 1)/floor((N - m) / float(k)) / k
 			Lk.append(Lmk)
 		L.append(log(mean(Lk)))
 		x.append([log(float(1) / k), 1])
-	
+
 	(p, r1, r2, s)=lstsq(x, L)
 	return p[0]
 
@@ -404,11 +360,9 @@ def hjorth(X, D = None):
 
 	M2 = float(sum(D ** 2)) / n
 	TP = sum(array(X) ** 2)
-	M4 = 0;
-	for i in xrange(1, len(D)):
-		M4 += (D[i] - D[i - 1]) ** 2
+	M4 = sum((D[i] - D[i - 1]) ** 2 for i in xrange(1, len(D)))
 	M4 = M4 / n
-	
+
 	return sqrt(M2 / TP), sqrt(float(M4) * TP / M2 / M2)	# Hjorth Mobility and Complexity
 
 def spectral_entropy(X, Band, Fs, Power_Ratio = None):
@@ -463,9 +417,10 @@ def spectral_entropy(X, Band, Fs, Power_Ratio = None):
 	if Power_Ratio is None:
 		Power, Power_Ratio = bin_power(X, Band, Fs)
 
-	Spectral_Entropy = 0
-	for i in xrange(0, len(Power_Ratio) - 1):
-		Spectral_Entropy += Power_Ratio[i] * log(Power_Ratio[i])
+	Spectral_Entropy = sum(
+		Power_Ratio[i] * log(Power_Ratio[i])
+		for i in xrange(0, len(Power_Ratio) - 1)
+	)
 	Spectral_Entropy /= log(len(Power_Ratio))	# to save time, minus one is omitted
 	return -1 * Spectral_Entropy
 
@@ -570,12 +525,8 @@ def fisher_info(X, Tau, DE, W = None):
 		M = embed_seq(X, Tau, DE)
 		W = svd(M, compute_uv = 0)
 		W /= sum(W)	
-	
-	FI = 0
-	for i in xrange(0, len(W) - 1):	# from 1 to M
-		FI += ((W[i +1] - W[i]) ** 2) / (W[i])
-	
-	return FI
+
+	return sum(((W[i +1] - W[i]) ** 2) / (W[i]) for i in xrange(0, len(W) - 1))
 
 def ap_entropy(X, M, R):
 	"""Computer approximate entropy (ApEN) of series X, specified by M and R.
@@ -635,7 +586,7 @@ def ap_entropy(X, M, R):
 	"""
 	N = len(X)
 
-	Em = embed_seq(X, 1, M)	
+	Em = embed_seq(X, 1, M)
 	Emp = embed_seq(X, 1, M + 1) #	try to only build Emp to save time
 
 	Cm, Cmp = zeros(N - M + 1), zeros(N - M)
@@ -655,11 +606,11 @@ def ap_entropy(X, M, R):
 			Cm[i] += 1
 			Cm[N-M] += 1
 		# try to count Cm[j] and Cmp[j] as well here
-	
+
 #		if max(abs(Em[N-M]-Em[N-M])) <= R: # index from 0, so N-M+1 is N-M  v 0.01b_r1
 #	if in_range(Em[i], Em[N - M], R):  # for Cm, there is one more iteration than Cmp
 #			Cm[N - M] += 1 # cross-matches on Cm[N - M]
-	
+
 	Cm[N - M] += 1 # Cm[N - M] self-matches
 #	import code;code.interact(local=locals())
 	Cm /= (N - M +1 )
@@ -667,9 +618,7 @@ def ap_entropy(X, M, R):
 #	import code;code.interact(local=locals())
 	Phi_m, Phi_mp = sum(log(Cm)),  sum(log(Cmp))
 
-	Ap_En = (Phi_m - Phi_mp) / (N - M)
-
-	return Ap_En
+	return (Phi_m - Phi_mp) / (N - M)
 
 def samp_entropy(X, M, R):
 	"""Computer sample entropy (SampEn) of series X, specified by M and R.
@@ -720,7 +669,7 @@ def samp_entropy(X, M, R):
 
 	N = len(X)
 
-	Em = embed_seq(X, 1, M)	
+	Em = embed_seq(X, 1, M)
 	Emp = embed_seq(X, 1, M + 1)
 
 	Cm, Cmp = zeros(N - M - 1) + 1e-100, zeros(N - M - 1) + 1e-100
@@ -735,9 +684,7 @@ def samp_entropy(X, M, R):
 				if abs(Emp[i][-1] - Emp[j][-1]) <= R: # check last one
 					Cmp[i] += 1
 
-	Samp_En = log(sum(Cm)/sum(Cmp))
-
-	return Samp_En
+	return log(sum(Cm)/sum(Cmp))
 
 def dfa(X, Ave = None, L = None):
 	"""Compute Detrended Fluctuation Analysis from a time series X and length of
